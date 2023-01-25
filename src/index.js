@@ -1,4 +1,4 @@
-import { fromEvent, Subject } from 'rxjs';
+import { from, fromEvent, Subject, merge } from 'rxjs';
 import WORDS_LIST from './wordsList.json';
 import { map, filter, takeUntil } from 'rxjs/operators';
 
@@ -6,13 +6,12 @@ const restartButton = document.getElementById("restart-button");
 const letterRows    = document.getElementsByClassName("letter-row");
 const onKeyDown$    = fromEvent(document,"keydown");
 const messageText   = document.getElementById("message-text");
-let letterIndex     = 0;
-let letterRowIndex  = 0;
-let userAnswer      = [];
+let letterIndex;
+let letterRowIndex;
+let userAnswer;
 const getRandomWord = () => WORDS_LIST[ Math.floor(Math.random() * WORDS_LIST.length) ];
-let rightWord       = getRandomWord();
+let rightWord;
 const userWinOrLoose$ = new Subject();
-console.log('Palabra correcta: ', rightWord );
 
 const insertLetter$ = onKeyDown$.pipe(
     map( (event) => event.key.toUpperCase() ),
@@ -27,47 +26,54 @@ const insertLetter = {
         let letterBox = Array.from(letterRows)[letterRowIndex].children[letterIndex];
         letterBox.textContent = letter;
         letterBox.classList.add("filled-letter");
-        userAnswer.push(letter);            
-        letterIndex++;        
+        letterIndex++; 
+        userAnswer.push(letter);    
     },
 };
 
 const checkWord$ = onKeyDown$.pipe(
     map( (event) => event.key ),
-    filter( (key) => key === 'Enter' && letterIndex === 5  && letterRowIndex <= 5)
+    filter((key) => key === "Enter" && letterRowIndex < 6)
 );
 
 const checkWord = {
     next: () => {       
-            const rightWordArray = Array.from(rightWord);
-            if(userAnswer.length !== 5){
-                messageText.textContent = 'Te faltan algunas letras';
+            //const rightWordArray = Array.from(rightWord);
+            if (userAnswer.length != 5) {
+                messageText.textContent =
+                  userAnswer.length === 4
+                    ? "Te falta 1 letra"
+                    : `Te faltan ${5 - userAnswer.length} letras`;
+                return;
+            }
+          
+            
+            if (!WORDS_LIST.includes(userAnswer.join(""))) {
+                messageText.textContent = `La palabra ${userAnswer
+                .join("")
+                .toUpperCase()} no está en la lista`;
                 return;
             }
 
-            for (let index = 0; index < 5; index++) {
+            userAnswer.map((_, index) => {
                 let letterColor = "";
-                let letterBox =  Array.from(letterRows)[letterRowIndex].children[index];
-                let letterPosition = Array.from(rightWord).indexOf(userAnswer[index]);
+                //let letterBox =  Array.from(letterRows)[letterRowIndex].children[index];
+                let letterBox = letterRows[letterRowIndex].children[index];
+                //let letterPosition = Array.from(rightWord).indexOf(userAnswer[index]);
+                let letterPosition = rightWord.indexOf(userAnswer[index]);
                 console.log(letterPosition);
 
-                if( letterPosition === -1 ){
-                    letterColor = 'letter-gray';
-                }else{
-                    if( rightWordArray[index] === userAnswer[index] ){
-                        letterColor = 'letter-green';
-                    }else{
-                        letterColor = 'letter-yellow';
+                if (rightWord[index] === userAnswer[index]) {
+                    letterColor = "letter-green";
+                } else {
+                    if (letterPosition === -1) {
+                        letterColor = "letter-grey";
+                    } else {
+                        letterColor = "letter-yellow";
                     }
                 }
                 letterBox.classList.add(letterColor);
-            }
-
-            // if(userAnswer.length === 5){
-            //     letterIndex = 0;
-            //     userAnswer = [];
-            //     letterRowIndex++;
-            // }
+            });
 
             if( userAnswer.join("") === rightWord ){                
                 messageText.textContent = `Si, la palabra ${rightWord.toUpperCase()} es correcta`;
@@ -105,13 +111,37 @@ const checkWord = {
     };
   
 
-    userWinOrLoose$.subscribe( () => {
-        let letterRowsWinned = Array.from(letterRows)[letterRowIndex];  
-        for (let index = 0; index < 5; index++) {
-            letterRowsWinned.children[index].classList.add('letter-green');
-        }
-    });
+    // userWinOrLoose$.subscribe( () => {
+    //     let letterRowsWinned = Array.from(letterRows)[letterRowIndex];  
+    //     for (let index = 0; index < 5; index++) {
+    //         letterRowsWinned.children[index].classList.add('letter-green');
+    //     }
+    // });
 
-    insertLetter$.pipe( takeUntil(userWinOrLoose$) ).subscribe(insertLetter);
-    checkWord$.pipe( takeUntil(userWinOrLoose$) ).subscribe(checkWord);
-    removeLetter$.pipe( takeUntil(userWinOrLoose$) ).subscribe(removeLetter);
+
+    const onWindowLoad$   = fromEvent(window, "load");
+    const onRestartClick$ = fromEvent(restartButton, "click");
+    const restartGame$    = merge(onWindowLoad$, onRestartClick$);
+
+    restartGame$.subscribe( () => {
+        
+        Array.from(letterRows).map((row) =>
+            Array.from(row.children).map((letterBox) => {
+                    letterBox.textContent = "";
+                    letterBox.classList = "letter";
+                })
+        );
+        
+        letterRowIndex = 0;
+        letterIndex    = 0;
+        userAnswer     = [];
+        messageText.textContent = "";
+        rightWord               = getRandomWord();    
+        restartButton.disabled  = true;
+        
+        console.log(`Right word: ${rightWord}`);
+
+        let insertLetterSuscription = insertLetter$.pipe( takeUntil(userWinOrLoose$) ).subscribe(insertLetter);
+        let checkWordSuscription    = checkWord$.pipe( takeUntil(userWinOrLoose$) ).subscribe(checkWord);
+        let removeLetterSuscription = removeLetter$.pipe( takeUntil(userWinOrLoose$) ).subscribe(removeLetter);
+    }); 
