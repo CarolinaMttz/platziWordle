@@ -10,7 +10,8 @@ let userAnswer      = [];
 const getRandomWord = () => WORDS_LIST[ Math.floor(Math.random() * WORDS_LIST.length) ];
 let rightWord       = getRandomWord();
 const userWinOrLoose$ = new Subject();
-console.log('getRandomWord ', rightWord );
+const messageText   = document.getElementById("message-text");
+console.log('Palabra correcta: ', rightWord );
 
 const insertLetter = {
     next: (event) => {
@@ -29,16 +30,67 @@ const insertLetter = {
 
 const checkWord = {
     next: (event) => {
-        if( event.key === 'Enter' ){
+        if( event.key === 'Enter' ){         
+
+            const rightWordArray = Array.from(rightWord);
+            if(userAnswer.length !== 5){
+                messageText.textContent = 'Te faltan algunas letras';
+                return;
+            }
+
+            for (let index = 0; index < 5; index++) {
+                let letterColor = "";
+                let letterBox =  Array.from(letterRows)[letterRowIndex].children[index];
+                let letterPosition = Array.from(rightWord).indexOf(userAnswer[index]);
+                console.log(letterPosition);
+
+                if( letterPosition === -1 ){
+                    letterColor = 'letter-gray';
+                }else{
+                    if( rightWordArray[index] === userAnswer[index] ){
+                        letterColor = 'letter-green';
+                    }else{
+                        letterColor = 'letter-yellow';
+                    }
+                }
+                letterBox.classList.add(letterColor);
+            }
+
+            if(userAnswer.length === 5){
+                letterIndex = 0;
+                userAnswer = [];
+                letterRowIndex++;
+            }
+
             if( userAnswer.join("") === rightWord ){
                 userWinOrLoose$.next();
             }
+           
         }
     }
 }
 
+//Observador `removeLetter` (o `deleteLetter`) que nos ayuda a borrar la última letra
+const deleteLetter = {
+    next: (event) => {
+      const pressedKey = event.key;
+      // Verificamos si es la tecla Backspace y que no estamos en la primera posición [0]
+      if (pressedKey === "Backspace" && letterIndex !== 0) {
+        let currentRow = letterRows[letterRowIndex];
+        let letterBox = currentRow.children[letterIndex-1];
+        letterBox.textContent = "";
+        letterBox.classList.remove("filled-letter");                   
+        letterIndex--;
+        userAnswer.pop(); 
+      }
+    }
+  };
+  
+
 onKeyDown$.subscribe(insertLetter);
 onKeyDown$.subscribe(checkWord);
+onKeyDown$.subscribe(deleteLetter);
+
 userWinOrLoose$.subscribe( () => {
     let letterRowsWinned = Array.from(letterRows)[letterRowIndex];   
     console.log(letterRowsWinned);  
