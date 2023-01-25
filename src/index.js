@@ -1,37 +1,44 @@
 import { fromEvent, Subject } from 'rxjs';
 import WORDS_LIST from './wordsList.json';
+import { map, filter, takeUntil } from 'rxjs/operators';
 
-
+const restartButton = document.getElementById("restart-button");
 const letterRows    = document.getElementsByClassName("letter-row");
 const onKeyDown$    = fromEvent(document,"keydown");
+const messageText   = document.getElementById("message-text");
 let letterIndex     = 0;
 let letterRowIndex  = 0;
 let userAnswer      = [];
 const getRandomWord = () => WORDS_LIST[ Math.floor(Math.random() * WORDS_LIST.length) ];
 let rightWord       = getRandomWord();
 const userWinOrLoose$ = new Subject();
-const messageText   = document.getElementById("message-text");
 console.log('Palabra correcta: ', rightWord );
 
-const insertLetter = {
-    next: (event) => {
-        const pressedKey = event.key.toUpperCase();
-        if( pressedKey.length === 1 && pressedKey.match(/[a-z]/i) ){
-            let letterBox = Array.from(letterRows)[letterRowIndex].children[letterIndex];
-            letterBox.textContent = pressedKey;
-            letterBox.classList.add("filled-letter");
-            userAnswer.push(pressedKey);            
-            letterIndex++;
-        }
+const insertLetter$ = onKeyDown$.pipe(
+    map( (event) => event.key.toUpperCase() ),
+    filter(
+        (pressedKey) =>
+            pressedKey.length === 1 && pressedKey.match(/[a-z]/i)  && letterIndex < 5
+    ) 
+)
 
-       
+const insertLetter = {
+    next: (letter) => {
+        let letterBox = Array.from(letterRows)[letterRowIndex].children[letterIndex];
+        letterBox.textContent = letter;
+        letterBox.classList.add("filled-letter");
+        userAnswer.push(letter);            
+        letterIndex++;        
     },
 };
 
-const checkWord = {
-    next: (event) => {
-        if( event.key === 'Enter' ){         
+const checkWord$ = onKeyDown$.pipe(
+    map( (event) => event.key ),
+    filter( (key) => key === 'Enter' && letterIndex === 5  && letterRowIndex <= 5)
+);
 
+const checkWord = {
+    next: () => {       
             const rightWordArray = Array.from(rightWord);
             if(userAnswer.length !== 5){
                 messageText.textContent = 'Te faltan algunas letras';
@@ -56,46 +63,55 @@ const checkWord = {
                 letterBox.classList.add(letterColor);
             }
 
-            if(userAnswer.length === 5){
-                letterIndex = 0;
-                userAnswer = [];
-                letterRowIndex++;
-            }
+            // if(userAnswer.length === 5){
+            //     letterIndex = 0;
+            //     userAnswer = [];
+            //     letterRowIndex++;
+            // }
 
-            if( userAnswer.join("") === rightWord ){
+            if( userAnswer.join("") === rightWord ){                
+                messageText.textContent = `Si, la palabra ${rightWord.toUpperCase()} es correcta`;
                 userWinOrLoose$.next();
+                restartButton.disabled = false;
+            } else {
+                letterIndex = 0;
+                letterRowIndex++;
+                userAnswer = [];
+ 
+                if( letterRowIndex === 6 ) {
+                    messageText.textContent = `Perdiste, la palabra correcta era ${rightWord.toUpperCase()}`;
+                    userWinOrLoose$.next();
+                    restartButton.disabled = false;
+                }
             }
            
-        }
+        
     }
 }
 
-//Observador `removeLetter` (o `deleteLetter`) que nos ayuda a borrar la última letra
-const deleteLetter = {
-    next: (event) => {
-      const pressedKey = event.key;
-      // Verificamos si es la tecla Backspace y que no estamos en la primera posición [0]
-      if (pressedKey === "Backspace" && letterIndex !== 0) {
-        let currentRow = letterRows[letterRowIndex];
-        let letterBox = currentRow.children[letterIndex-1];
-        letterBox.textContent = "";
-        letterBox.classList.remove("filled-letter");                   
-        letterIndex--;
-        userAnswer.pop(); 
-      }
-    }
-  };
+    const removeLetter$ = onKeyDown$.pipe(
+        map((event) => event.key),
+        filter((key) => key === "Backspace" && letterIndex !== 0)
+    );
+
+    const removeLetter = {
+        next: () => {
+            let letterBox = letterRows[letterRowIndex].children[userAnswer.length - 1];
+            letterBox.textContent = "";
+            letterBox.classList = "letter";
+            letterIndex--;
+            userAnswer.pop();
+        },
+    };
   
 
-onKeyDown$.subscribe(insertLetter);
-onKeyDown$.subscribe(checkWord);
-onKeyDown$.subscribe(deleteLetter);
+    userWinOrLoose$.subscribe( () => {
+        let letterRowsWinned = Array.from(letterRows)[letterRowIndex];  
+        for (let index = 0; index < 5; index++) {
+            letterRowsWinned.children[index].classList.add('letter-green');
+        }
+    });
 
-userWinOrLoose$.subscribe( () => {
-    let letterRowsWinned = Array.from(letterRows)[letterRowIndex];   
-    console.log(letterRowsWinned);  
-    for (let index = 0; index < 5; index++) {
-        letterRowsWinned.children[index].classList.add('letter-green');
-    }
-});
-
+    insertLetter$.pipe( takeUntil(userWinOrLoose$) ).subscribe(insertLetter);
+    checkWord$.pipe( takeUntil(userWinOrLoose$) ).subscribe(checkWord);
+    removeLetter$.pipe( takeUntil(userWinOrLoose$) ).subscribe(removeLetter);
